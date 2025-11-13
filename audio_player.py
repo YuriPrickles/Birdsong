@@ -30,7 +30,7 @@ print(library)
 class MusicPlayer(BoxLayout):
 
 	def update_buttons(self, button):
-		self.play_button.text = "Playing" if not self.playing else "Stop"
+		self.play_button.text = "Stop" if not self.playing else "Play"
 		self.pause_button.text = "Pause" if not self.paused else "Resume"
 		self.pause_button.disabled = self.playing
 
@@ -88,6 +88,9 @@ class MusicPlayer(BoxLayout):
 		self.button_container.add_widget(self.play_button)
 		self.button_container.add_widget(self.pause_button)
 		self.add_widget(self.button_container)
+		self.update_buttons(None)
+		self.play_button.text = "Play"
+		self.pause_button.disabled = True
 
 class SongInfoDisplay(BoxLayout):
 	def __init__(self):
@@ -118,7 +121,6 @@ class LibraryScrollView(ScrollView):
 		music_player.selected_song_path = button.path
 
 music_player:MusicPlayer = MusicPlayer()
-library_scroll_view:LibraryScrollView = LibraryScrollView()
 class BirdsongMain(App):
 	global selected_song_path
 	def build(self):
