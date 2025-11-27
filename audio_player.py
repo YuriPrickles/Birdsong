@@ -19,7 +19,14 @@ from kivy.uix.button import Button
 from kivy.core.audio import SoundLoader
 from kivy.uix.checkbox import CheckBox
 
-google_api_key = "AIzaSyCTHdP9vIv6froJxV_FOxqnz2dtuXn8394"
+import argparse
+
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+DEVELOPER_KEY = 'AIzaSyCTHdP9vIv6froJxV_FOxqnz2dtuXn8394'
+YOUTUBE_API_SERVICE_NAME = 'youtube'
+YOUTUBE_API_VERSION = 'v3'
 
 app_paths = AppDataPaths("Birdsong")
 app_paths.setup()
@@ -231,7 +238,7 @@ class PlaylistMenu(ScrollView):
 		popup_layout = ScrollView()
 		box = BoxLayout(orientation="vertical")
 		grid = GridLayout(cols=1, spacing=10, size_hint_y=None,width=400,pos_hint=(0,0))
-		closeButton = Button(text="OK")
+		closeButton = Button(text="Close",size_hint_y=0.2)
 		playlist_file =open(button.path,"r")
 		songlist_data:list[str] = eval(playlist_file.readline())
 
@@ -304,19 +311,89 @@ class PlaylistMenu(ScrollView):
 		self.popup.dismiss()
 		self.popup = None
 
+class ImporterMenu(BoxLayout):
+	def __init__(self):
+		super(ImporterMenu, self).__init__()
+		self.orientation = "vertical"
+		self.nestedbox = BoxLayout(orientation="horizontal")
+
+		self.search_box = TextInput(hint_text="Search from YouTube...",multiline=False,size_hint_y=0.1)
+		self.start_search = Button(text="Search!", size_hint_x=0.2,size_hint_y=0.1)
+		self.search_menu:SearchMenu = SearchMenu()
+		self.start_search.bind(on_release=self.call_search)
+		self.nestedbox.add_widget(self.search_box)
+		self.nestedbox.add_widget(self.start_search)
+		self.add_widget(self.nestedbox)
+		self.add_widget(self.search_menu)
+	def call_search(self, button):
+		self.search_menu.search_by_keyword(self.search_box.text)
+
+class SearchMenu(ScrollView):
+	def __init__(self):
+		super(SearchMenu, self).__init__()
+		self.gridlayout=GridLayout(cols=2,spacing=10,size_hint_y=None)
+		self.gridlayout.bind(minimum_height=self.gridlayout.setter("height"))
+		self.add_widget(self.gridlayout)
+	def search_by_keyword(self, q):
+		print(q)
+		youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
+		developerKey=DEVELOPER_KEY)
+
+		# Call the search.list method to retrieve results matching the specified
+		# query term.
+		search_response = youtube.search().list(
+		q=q,
+		part='id,snippet',
+		maxResults=7
+		).execute()
+
+		videos = []
+		yt_playlists = []
+
+		# Add each result to the appropriate list, and then display the lists of
+		# matching videos, channels, and playlists.
+		for search_result in search_response.get('items', []):
+			if search_result['id']['kind'] == 'youtube#video':
+				self.gridlayout.add_widget(Label(text='%s (%s)' % (search_result['snippet']['title'],
+				                         search_result['id']['videoId'])))
+				videos.append('%s (%s)' % (search_result['snippet']['title'],
+				                         search_result['id']['videoId']))
+			elif search_result['id']['kind'] == 'youtube#playlist':
+				self.gridlayout.add_widget(Label(text='%s (%s)' % (search_result['snippet']['title'],
+				                            search_result['id']['playlistId'])))
+				yt_playlists.append('%s (%s)' % (search_result['snippet']['title'],
+				                            search_result['id']['playlistId']))
+
+		print('Videos:\n', '\n'.join(videos), '\n')
+		print('Playlists:\n', '\n'.join(yt_playlists), '\n')
+
+		if __name__ == '__main__':
+			parser = argparse.ArgumentParser()
+			parser.add_argument('--q', help='Search term', default='Google')
+			parser.add_argument('--max-results', help='Max results', default=7)
+			args = parser.parse_args()
+
+			try:
+				self.search_by_keyword(args)
+			except HttpError as e:
+				print('An HTTP error %d occurred:\n%s' % (e.resp.status, e.content))
 class MenuTabs(TabbedPanel):
-	def __init__(self, lib_widget:LibraryScrollView, pl_widget:PlaylistMenu):
+	def __init__(self, lib_widget:LibraryScrollView, pl_widget:PlaylistMenu, imp_widget:ImporterMenu):
 		super(MenuTabs,self).__init__()
 
 		self.size_hint_x = 1.5
 		self.do_default_tab = False
+
 		music_library_tab:TabbedPanelItem = TabbedPanelItem(text="Music Library")
 		music_library_tab.add_widget(lib_widget)
 		self.add_widget(music_library_tab)
+
 		playlist_tab:TabbedPanelItem = TabbedPanelItem(text="Playlists")
 		playlist_tab.add_widget(pl_widget)
 		self.add_widget(playlist_tab)
+
 		importer_tab:TabbedPanelItem = TabbedPanelItem(text="Add Songs")
+		importer_tab.add_widget(imp_widget)
 		self.add_widget(importer_tab)
 music_player:MusicPlayer = MusicPlayer()
 class BirdsongMain(App):
@@ -324,8 +401,9 @@ class BirdsongMain(App):
 	def build(self):
 		library_scroll_view = LibraryScrollView()
 		playlist_menu = PlaylistMenu()
+		importer_menu = ImporterMenu()
 		self.base_layout = BoxLayout(orientation = 'horizontal')
-		self.base_layout.add_widget(MenuTabs(library_scroll_view,playlist_menu))
+		self.base_layout.add_widget(MenuTabs(library_scroll_view,playlist_menu,importer_menu))
 		self.base_layout.add_widget(music_player)
 		return self.base_layout
 	def get_song_library(self):
