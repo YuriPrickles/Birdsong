@@ -18,15 +18,14 @@ from kivy.uix.popup import Popup
 from kivy.uix.button import Button
 from kivy.core.audio import SoundLoader
 from kivy.uix.checkbox import CheckBox
+import uyts
 
 import argparse
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-DEVELOPER_KEY = 'AIzaSyCTHdP9vIv6froJxV_FOxqnz2dtuXn8394'
-YOUTUBE_API_SERVICE_NAME = 'youtube'
-YOUTUBE_API_VERSION = 'v3'
+
 
 app_paths = AppDataPaths("Birdsong")
 app_paths.setup()
@@ -317,12 +316,13 @@ class ImporterMenu(BoxLayout):
 		self.orientation = "vertical"
 		self.nestedbox = BoxLayout(orientation="horizontal")
 
-		self.search_box = TextInput(hint_text="Search from YouTube...",multiline=False,size_hint_y=0.1)
-		self.start_search = Button(text="Search!", size_hint_x=0.2,size_hint_y=0.1)
+		self.search_box = TextInput(hint_text="Search from YouTube...",multiline=False)
+		self.start_search = Button(text="Search!", size_hint_x=0.2)
 		self.search_menu:SearchMenu = SearchMenu()
 		self.start_search.bind(on_release=self.call_search)
 		self.nestedbox.add_widget(self.search_box)
 		self.nestedbox.add_widget(self.start_search)
+		self.nestedbox.size_hint_y = 0.1
 		self.add_widget(self.nestedbox)
 		self.add_widget(self.search_menu)
 	def call_search(self, button):
@@ -331,52 +331,26 @@ class ImporterMenu(BoxLayout):
 class SearchMenu(ScrollView):
 	def __init__(self):
 		super(SearchMenu, self).__init__()
-		self.gridlayout=GridLayout(cols=2,spacing=10,size_hint_y=None)
+		self.gridlayout=GridLayout(cols=1,spacing=10,size_hint_y=None)
 		self.gridlayout.bind(minimum_height=self.gridlayout.setter("height"))
 		self.add_widget(self.gridlayout)
 	def search_by_keyword(self, q):
 		print(q)
-		youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
-		developerKey=DEVELOPER_KEY)
-
-		# Call the search.list method to retrieve results matching the specified
-		# query term.
-		search_response = youtube.search().list(
-		q=q,
-		part='id,snippet',
-		maxResults=7
-		).execute()
-
-		videos = []
-		yt_playlists = []
-
-		# Add each result to the appropriate list, and then display the lists of
-		# matching videos, channels, and playlists.
-		for search_result in search_response.get('items', []):
-			if search_result['id']['kind'] == 'youtube#video':
-				self.gridlayout.add_widget(Label(text='%s (%s)' % (search_result['snippet']['title'],
-				                         search_result['id']['videoId'])))
-				videos.append('%s (%s)' % (search_result['snippet']['title'],
-				                         search_result['id']['videoId']))
-			elif search_result['id']['kind'] == 'youtube#playlist':
-				self.gridlayout.add_widget(Label(text='%s (%s)' % (search_result['snippet']['title'],
-				                            search_result['id']['playlistId'])))
-				yt_playlists.append('%s (%s)' % (search_result['snippet']['title'],
-				                            search_result['id']['playlistId']))
-
-		print('Videos:\n', '\n'.join(videos), '\n')
-		print('Playlists:\n', '\n'.join(yt_playlists), '\n')
-
-		if __name__ == '__main__':
-			parser = argparse.ArgumentParser()
-			parser.add_argument('--q', help='Search term', default='Google')
-			parser.add_argument('--max-results', help='Max results', default=7)
-			args = parser.parse_args()
-
-			try:
-				self.search_by_keyword(args)
-			except HttpError as e:
-				print('An HTTP error %d occurred:\n%s' % (e.resp.status, e.content))
+		search = uyts.Search(q,minResults=5)
+		for res in search.results:
+			if res.resultType == "channel" or res.resultType == "playlist": continue
+			author_label:Label = Label(size_hint_x=0.3, height=40, text="[%s]" % res.author, size_hint_y=1, shorten = True, shorten_from ="right")
+			author_label.bind(size=author_label.setter('text_size'))
+			dur_label:Label = Label(size_hint_x=0.1, height=40, text="(%s)" % res.duration, size_hint_y=1, shorten = True, shorten_from ="right")
+			dur_label.bind(size=dur_label.setter('text_size'))
+			title_label:Label = Label(size_hint_x=0.6, height=40, text="%s" % res.title, size_hint_y=1, shorten = True, shorten_from ="right")
+			title_label.bind(size=title_label.setter('text_size'))
+			grid = GridLayout(cols=3, orientation="lr-tb", size_hint_y=None, height=40)
+			print("(%s) [%s] %s" % (res.duration, res.author, res.title))
+			grid.add_widget(author_label)
+			grid.add_widget(dur_label)
+			grid.add_widget(title_label)
+			self.gridlayout.add_widget(grid)
 class MenuTabs(TabbedPanel):
 	def __init__(self, lib_widget:LibraryScrollView, pl_widget:PlaylistMenu, imp_widget:ImporterMenu):
 		super(MenuTabs,self).__init__()
