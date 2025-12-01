@@ -19,6 +19,7 @@ from kivy.uix.button import Button
 from kivy.core.audio import SoundLoader
 from kivy.uix.checkbox import CheckBox
 from kivy.clock import Clock
+from kivy.uix.slider import Slider
 import uyts
 import random
 import yt_dlp
@@ -29,15 +30,15 @@ from kivy.uix.widget import Widget
 
 
 def log(message):
-    sys.stderr.write("%s\n" % (message,))
-    sys.stderr.flush()
+	sys.stderr.write("%s\n" % (message,))
+	sys.stderr.flush()
 
 class Logger:
-    debug = log
-    warning = log
-    error = log
-    info = log
-    critical = log
+	debug = log
+	warning = log
+	error = log
+	info = log
+	critical = log
 
 print(sys.executable)
 
@@ -52,9 +53,12 @@ library:list[str] = []
 playlists:list[str] = []
 print(library)
 
-search_term = ""
-
 selected_song_path:str = ""
+
+def match_search(search:str,string:str):
+	if search.strip() == "" or len(search.strip()) <= 0:
+		return True
+	return string.lower().__contains__(search.strip().lower())
 
 class BabyInt:
 	def __init__(self, number):
@@ -174,6 +178,7 @@ class MusicPlayer(BoxLayout):
 		self.button_container.add_widget(self.playnext)
 
 		self.add_widget(self.button_container)
+
 		self.update_buttons(None)
 		self.play_button.text = "Play"
 		self.pause_button.disabled = True
@@ -189,15 +194,21 @@ class SongInfoDisplay(BoxLayout):
 		self.add_widget(self.artist_label)
 		self.add_widget(self.album_label)
 
-class LibraryScrollView(ScrollView):
+class LibraryScrollView(GridLayout):
 	def __init__(self):
-		super(LibraryScrollView, self).__init__()
+		super(LibraryScrollView, self).__init__(cols=1, spacing=10, size_hint_y=1,pos_hint=(0,0))
 		self.layout = GridLayout(cols=1, spacing=10, size_hint_y=None,width=400,pos_hint=(0,0))
 		self.layout.bind(minimum_height=self.layout.setter("height"))
-		self.add_widget(self.layout)
+		self.searchbox = TextInput(hint_text="Search...",size_hint_y=0.1)
+		self.bigbox = ScrollView(size_hint_y=1)
+		self.bigbox.add_widget(self.layout)
+		self.add_widget(self.searchbox)
+		self.add_widget(self.bigbox)
 	def update_library(self):
 		self.layout.clear_widgets()
 		for song in library:
+			if not match_search(self.searchbox.text,song.removeprefix(library_path).removesuffix(".wav")):
+				continue
 			item_container = BoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=40)
 			item_container.bind(minimum_height=self.layout.setter("height"))
 			artist_label:Label = Label(text="Unknown Artist",shorten_from="right")
@@ -226,31 +237,32 @@ class LibraryScrollView(ScrollView):
 		global selected_song_path
 		selected_song_path = button.path
 
-class ContextMenu(Bubble):
+class PlaylistMenu(GridLayout):
 	def __init__(self):
-		super(ContextMenu,self).__init__()
-		bc:BubbleContent = BubbleContent()
-		add_to_playlist:BubbleButton(text="A")
-
-class PlaylistMenu(ScrollView):
-	def __init__(self):
-		super(PlaylistMenu, self).__init__()
+		super(PlaylistMenu, self).__init__(cols=1, spacing=10, size_hint_y=1,pos_hint=(0,0))
 		self.layout = GridLayout(cols=1, spacing=10, size_hint_y=1,width=400,pos_hint=(0,0))
 		self.layout.bind(minimum_height=self.layout.setter("height"))
 		self.popup = None
 		self.index = 0
+		self.searchbox = TextInput(hint_text="Search...",size_hint_y=0.1)
+		self.bigbox = ScrollView(size_hint_y=1)
 		self.addbutton = Button(text="+ Add new playlist...", size_hint_y=None, height=40, width=400,shorten_from="right", size_hint=(2.0, 1.0), halign="left", valign="middle")
 		self.box = BoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=40)
 		self.box.bind(minimum_height=self.layout.setter("height"))
 		self.addbutton.bind(size=self.addbutton.setter('text_size'))
 		self.addbutton.bind(on_release=self.add_playlist)
 		self.box.add_widget(self.addbutton)
-		self.add_widget(self.layout)
+
+		self.bigbox.add_widget(self.layout)
+		self.add_widget(self.searchbox)
+		self.add_widget(self.bigbox)
 		self.to_add: list[str] = []
 		self.selected_playlist = None
 	def update_playlists(self):
 		self.layout.clear_widgets()
 		for pl in playlists:
+			if not match_search(self.searchbox.text,pl.removeprefix(library_path).removesuffix(".txt")):
+				continue
 			item_container = BoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=40)
 			item_container.bind(minimum_height=self.layout.setter("height"))
 			btn = Button(text=pl.removeprefix(library_path).removesuffix(".txt"), size_hint_y=None, height=40, width=400,shorten_from="right", size_hint=(2.0, 1.0), halign="left", valign="middle")
@@ -539,6 +551,8 @@ class SearchMenu(ScrollView):
 		with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 			ydl.download(url)
 
+
+
 class SongQueue(BoxLayout):
 	def __init__(self):
 		super(SongQueue, self).__init__(orientation="vertical")
@@ -657,6 +671,8 @@ class BirdsongMain(App):
 		self.temp_aq = []
 		self.temp_pl = []
 		self.temp_lib = []
+		self.oldlibsearch = ""
+		self.oldplsearch = ""
 	def build(self):
 		get_song_library()
 		global library_scroll_view, playlist_menu, importer_menu, song_queue, music_player
@@ -676,10 +692,12 @@ class BirdsongMain(App):
 		song_queue.currently_playing.text = "Currently Playing: %s" % str(playing.removeprefix(library_path).removesuffix(".wav"))
 		if audio_queue != self.temp_aq:
 			song_queue.update_song_queue()
-		if playlists != self.temp_pl:
+		if playlists != self.temp_pl or playlist_menu.searchbox.text.lower() != self.oldplsearch.lower():
 			playlist_menu.update_playlists()
-		if library != self.temp_lib:
+		if library != self.temp_lib or library_scroll_view.searchbox.text.lower() != self.oldlibsearch.lower():
 			library_scroll_view.update_library()
+		self.oldplsearch = playlist_menu.searchbox.text
+		self.oldlibsearch = library_scroll_view.searchbox.text
 		self.temp_pl = playlists.copy()
 		self.temp_lib = library.copy()
 		self.temp_aq = audio_queue.copy()
