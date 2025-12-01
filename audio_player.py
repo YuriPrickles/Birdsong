@@ -1,5 +1,4 @@
-
-
+from textwrap import shorten
 
 import kivy
 import os
@@ -19,6 +18,7 @@ from kivy.uix.button import Button
 from kivy.core.audio import SoundLoader
 from kivy.uix.checkbox import CheckBox
 from kivy.clock import Clock
+from kivy.uix.image import Image
 from kivy.uix.slider import Slider
 import uyts
 import random
@@ -75,7 +75,7 @@ class MusicPlayer(BoxLayout):
 
 	def update_buttons(self, button):
 		self.play_button.text = "Stop" if self.playing else "Play"
-		self.pause_button.text = "Pause" if not self.paused else "Resume"
+		self.pause_button.text = "Resume" if not self.paused else "Pause"
 		self.pause_button.disabled = not self.loaded_sound
 
 	def play_song(self, button):
@@ -97,8 +97,12 @@ class MusicPlayer(BoxLayout):
 		selected_song_path = audio_queue[queue_index.integer] if len(audio_queue) > 0 else (selected_song_path if selected_song_path != "" else library[0])
 		self.loaded_sound = self.soundloader.load(selected_song_path)
 		if self.soundloader:
+			self.song_slider.max = self.loaded_sound.length
+			self.song_slider.min = 0
+			self.song_slider.value = 0
 			self.playing = True
 			self.paused = False
+			self.override_slider = False
 			print("Sound found at %s" % self.loaded_sound.source)
 			print("Sound is %.3f seconds" % self.loaded_sound.length)
 			if len(audio_queue) == 0:
@@ -112,13 +116,17 @@ class MusicPlayer(BoxLayout):
 		if self.soundloader:
 			if self.loaded_sound.state == "play":
 				self.saved_seek_value = self.loaded_sound.get_pos()
+				self.song_slider.value = self.saved_seek_value
 				self.paused = True
+				self.override_slider = True
 				print(self.saved_seek_value)
 				self.loaded_sound.stop()
 			else:
 				self.paused = False
+				self.override_slider = False
 				self.loaded_sound.play()
 				self.loaded_sound.seek(self.saved_seek_value)
+
 	def play_prev(self, button):
 		global selected_song_path
 		if self.soundloader:
@@ -130,6 +138,10 @@ class MusicPlayer(BoxLayout):
 			self.loaded_sound = self.soundloader.load(selected_song_path)
 			self.playing = True
 			self.paused = False
+			self.override_slider = False
+			self.song_slider.max = self.loaded_sound.length
+			self.song_slider.min = 0
+			self.song_slider.value = 0
 			self.loaded_sound.play()
 			self.update_buttons(None)
 	def play_next(self, button):
@@ -143,6 +155,10 @@ class MusicPlayer(BoxLayout):
 			self.loaded_sound = self.soundloader.load(selected_song_path)
 			self.playing = True
 			self.paused = False
+			self.override_slider = False
+			self.song_slider.max = self.loaded_sound.length
+			self.song_slider.min = 0
+			self.song_slider.value = 0
 			self.loaded_sound.play()
 			self.update_buttons(None)
 	def __init__(self):
@@ -157,11 +173,13 @@ class MusicPlayer(BoxLayout):
 		self.saved_seek_value:float = 0
 		self.soundloader = SoundLoader()
 		self.loaded_sound:kivy.core.audio.Sound = kivy.core.audio.Sound()
-		self.button_container = BoxLayout(orientation = "horizontal")
+		self.button_container = BoxLayout(orientation = "horizontal",size_hint_y = 0.2)
 		self.play_button:Button = Button(text='Play')
 		self.pause_button:Button = Button(text='Pause')
 		self.playprev:Button = Button(text='Play Previous')
 		self.playnext:Button = Button(text='Play Next')
+
+		self.song_slider:Slider = Slider(size_hint_y = 0.1)
 
 		self.play_button.bind(on_release=self.play_song)
 		self.pause_button.bind(on_release=self.pause_song)
@@ -172,27 +190,52 @@ class MusicPlayer(BoxLayout):
 		self.play_button.bind(on_release=self.update_buttons)
 		self.pause_button.bind(on_release=self.update_buttons)
 
+		self.override_slider = True
+		self.song_slider.bind(on_touch_up=self.on_slider_release)
+		self.song_slider.bind(on_touch_down=self.update_override_slider)
+
 		self.button_container.add_widget(self.playprev)
 		self.button_container.add_widget(self.play_button)
 		self.button_container.add_widget(self.pause_button)
 		self.button_container.add_widget(self.playnext)
 
+		self.add_widget(self.song_slider)
 		self.add_widget(self.button_container)
 
 		self.update_buttons(None)
 		self.play_button.text = "Play"
 		self.pause_button.disabled = True
+	def on_slider_release(self, slider, touch):
+		if touch.grab_current == slider:
+			self.saved_seek_value = slider.value
+			self.loaded_sound.stop()
+			self.loaded_sound.play()
+			self.playing = True
+			self.paused = False
+			self.update_buttons(None)
+			self.loaded_sound.seek(self.saved_seek_value)
+			self.override_slider = False
+	def update_override_slider(self, slider, touch):
+		self.saved_seek_value = slider.value
+		self.override_slider = True
+
 
 class SongInfoDisplay(BoxLayout):
 	def __init__(self):
-		super(SongInfoDisplay, self).__init__()
+		super(SongInfoDisplay, self).__init__(size_hint_y=None,orientation="vertical")
 		self.orientation = "vertical"
-		self.title_label = Label(text="Unknown Song")
-		self.artist_label = Label(text="Unknown Artist")
-		self.album_label = Label(text="Unknown Album")
-		self.add_widget(self.title_label)
-		self.add_widget(self.artist_label)
-		self.add_widget(self.album_label)
+		self.thumbnail:Image = Image()
+		self.container = BoxLayout(orientation="vertical", spacing=10, size_hint_y=0.3, height=40)
+		self.title_label = Label(text="Unknown Title",shorten_from="right",shorten=True,size_hint_y=0.3, height=80,halign="center")
+		self.title_label.bind(size=self.title_label.setter('text_size'))
+		self.artist_label = Label(text="Unknown Artist",shorten_from="right",shorten=True,size_hint_y=0.3, height=80,halign="center")
+		self.artist_label.bind(size=self.artist_label.setter('text_size'))
+		self.album_label = Label(text="Unknown Album",shorten_from="right",shorten=True,size_hint_y=0.3, height=80,halign="center")
+		self.album_label.bind(size=self.album_label.setter('text_size'))
+		self.container.add_widget(self.title_label)
+		self.container.add_widget(self.artist_label)
+		self.container.add_widget(self.album_label)
+		self.add_widget(self.container)
 
 class LibraryScrollView(GridLayout):
 	def __init__(self):
@@ -673,6 +716,7 @@ class BirdsongMain(App):
 		self.temp_lib = []
 		self.oldlibsearch = ""
 		self.oldplsearch = ""
+		self.base_layout = BoxLayout(orientation = 'horizontal')
 	def build(self):
 		get_song_library()
 		global library_scroll_view, playlist_menu, importer_menu, song_queue, music_player
@@ -681,13 +725,20 @@ class BirdsongMain(App):
 		importer_menu = ImporterMenu()
 		song_queue = SongQueue()
 		music_player = MusicPlayer()
-		self.base_layout = BoxLayout(orientation = 'horizontal')
 		self.base_layout.add_widget(MenuTabs(library_scroll_view,playlist_menu,importer_menu,song_queue))
 		self.base_layout.add_widget(music_player)
 		Clock.schedule_interval(self.update, 0.01)
 		return self.base_layout
 	def update(self, *args):
 		get_song_library()
+		if music_player.playing and music_player.loaded_sound.get_pos() >= music_player.loaded_sound.length and queue_index.integer < len(audio_queue) - 1:
+			music_player.play_next(None)
+		if not music_player.override_slider:
+			if music_player.playing:
+				music_player.saved_seek_value = music_player.loaded_sound.get_pos()
+				music_player.song_slider.value = music_player.loaded_sound.get_pos()
+			else:
+				music_player.song_slider.value = music_player.saved_seek_value
 		playing = selected_song_path if len(audio_queue) < 1 else (audio_queue[queue_index.integer] if queue_index.integer != -1 else audio_queue[0])
 		song_queue.currently_playing.text = "Currently Playing: %s" % str(playing.removeprefix(library_path).removesuffix(".wav"))
 		if audio_queue != self.temp_aq:
