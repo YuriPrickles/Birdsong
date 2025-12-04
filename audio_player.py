@@ -334,7 +334,7 @@ class LibraryScrollView(GridLayout):
 class PlaylistMenu(GridLayout):
 	def __init__(self):
 		super(PlaylistMenu, self).__init__(cols=1, spacing=10, size_hint_y=1, pos_hint=(0, 0))
-		self.layout = GridLayout(cols=1, spacing=10, size_hint_y=1, width=400, pos_hint=(0, 0))
+		self.layout = GridLayout(cols=1, spacing=10, size_hint_y=None, width=400, pos_hint=(0, 0))
 		self.layout.bind(minimum_height=self.layout.setter("height"))
 		self.popup = None
 		self.index = 0
@@ -345,6 +345,7 @@ class PlaylistMenu(GridLayout):
 		self.box = BoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=40)
 		self.box.bind(minimum_height=self.layout.setter("height"))
 		self.addbutton.bind(size=self.addbutton.setter('text_size'))
+		self.addbutton.playlist_target = None
 		self.addbutton.bind(on_release=self.add_playlist)
 		self.box.add_widget(self.addbutton)
 
@@ -388,12 +389,14 @@ class PlaylistMenu(GridLayout):
 		print(button.path)
 		popup_layout = ScrollView()
 		box = BoxLayout(orientation="vertical")
-		grid = GridLayout(cols=1, spacing=10, size_hint_y=1, width=400)
-		play_button = Button(text="Play", size_hint_y=0.2)
-		play_shuffle = Button(text="Shuffle Play", size_hint_y=0.2)
-		add_to_q = Button(text="Add to\nQueue", size_hint_y=0.2)
-		add_to_q_shuffle = Button(text="Shuffle\nto Queue", size_hint_y=0.2)
-		closeButton = Button(text="Close", size_hint_y=0.2)
+		grid = GridLayout(cols=1, spacing=10, size_hint_y=None)
+		grid.bind(minimum_height=grid.setter("height"))
+		play_button = Button(text="Play")
+		play_shuffle = Button(text="Shuffle Play")
+		add_to_q = Button(text="Add to\nQueue")
+		add_to_q_shuffle = Button(text="Shuffle\nto Queue")
+		edit_playlist = Button(text="Edit\nPlaylist")
+		closeButton = Button(text="Close")
 		playlist_file = open(button.path, "r")
 		songlist_data: list[str] = eval(playlist_file.readline())
 		self.selected_playlist = button.path
@@ -405,11 +408,12 @@ class PlaylistMenu(GridLayout):
 		)
 		popup_layout.add_widget(grid)
 		box.add_widget(popup_layout)
-		button_box = BoxLayout(orientation="horizontal",size_hint_y=0.4)
+		button_box = BoxLayout(orientation="horizontal",size_hint_y=0.3)
 		button_box.add_widget(play_button)
 		button_box.add_widget(play_shuffle)
 		button_box.add_widget(add_to_q)
 		button_box.add_widget(add_to_q_shuffle)
+		button_box.add_widget(edit_playlist)
 		button_box.add_widget(closeButton)
 		box.add_widget(button_box)
 
@@ -417,18 +421,22 @@ class PlaylistMenu(GridLayout):
 		play_shuffle.songlist = songlist_data.copy()
 		add_to_q.songlist = songlist_data.copy()
 		add_to_q_shuffle.songlist = songlist_data.copy()
+		edit_playlist.playlist_target = button.path
+		edit_playlist.songlist = songlist_data.copy()
 		random.shuffle(play_shuffle.songlist)
 		random.shuffle(add_to_q_shuffle.songlist)
 		closeButton.bind(on_release=self.on_close)
 		play_button.bind(on_release=self.play_playlist)
 		play_shuffle.bind(on_release=self.play_playlist)
+		edit_playlist.bind(on_release=self.edit_playlist)
 		add_to_q.bind(on_release=self.queue_playlist)
 		add_to_q_shuffle.bind(on_release=self.queue_playlist)
 		self.popup.open()
 		for song in songlist_data:
-			playlist_item_container = GridLayout(cols=4,size_hint_y=0.1)
-			song_name: Label = Label(text=short_path(song), size_hint=(1, 0.1),
-			                         halign="left", valign="middle")
+			playlist_item_container = BoxLayout(orientation="horizontal",size_hint_y=None,height=40)
+			playlist_item_container.bind(minimum_height=playlist_item_container.setter("height"))
+			song_name: Label = Label(text=short_path(song), size_hint=(1, 1),
+			                         halign="left", valign="middle",height=40)
 			song_name.bind(size=song_name.setter('text_size'))
 			move_up = Button(text="^", size_hint_y=1, height=40, width=400, size_hint_x=0.04, halign="center",
 			                 valign="middle")
@@ -483,9 +491,15 @@ class PlaylistMenu(GridLayout):
 		self.popup = None
 
 	def add_playlist(self, button):
+		self.to_add.clear()
+
+		edit_mode = False
+		if button.playlist_target is not None:
+			edit_mode = button.playlist_target != ""
+
 		popup_layout = ScrollView()
 		box = BoxLayout(orientation="vertical")
-		grid = GridLayout(cols=1, spacing=10, size_hint_y=None, width=800)
+		grid = GridLayout(cols=1, spacing=10, size_hint_y=None)
 		grid.bind(minimum_height=grid.setter("height"))
 		button_container = BoxLayout(orientation="horizontal", size_hint_y=None)
 		open_button = Button(text="OK")
@@ -493,20 +507,30 @@ class PlaylistMenu(GridLayout):
 		text_input = TextInput(hint_text="Enter playlist name")
 		text_input.multiline = False
 		text_input.size_hint_y = None
-		open_button.widget_corpse: TextInput = text_input
+		if edit_mode:
+			text_input.text = short_path(button.playlist_target,".txt")
+		open_button.widget_corpse = text_input
 		for song in library:
 			checkbox = CheckBox(width=40, size_hint_x=0.1)
 			checkbox.metadata = song
+			if edit_mode and button.songlist.__contains__(song):
+				checkbox.active = True
+			self.on_checkbox_active(checkbox, checkbox.active)
 			checkbox.bind(active=self.on_checkbox_active)
-			label = Label(text=short_path(song), halign="left", valign="middle",
-			              height="40")
+			label = Label(text=short_path(song), halign="left", valign="middle", height="40")
 			label.bind(size=label.setter('text_size'))
 			songselect = BoxLayout(orientation="horizontal", size_hint_y=None, width=800, height=20)
 			songselect.bind(minimum_height=songselect.setter("height"))
 			songselect.add_widget(checkbox)
 			songselect.add_widget(label)
 			grid.add_widget(songselect)
-		box.add_widget(text_input)
+
+		if edit_mode:
+			editing_playlist_label = Label(text="Editing %s" % short_path(button.playlist_target,".txt"), halign="left", valign="middle",height="40",size_hint_y=0.2)
+			editing_playlist_label.bind(size=editing_playlist_label.setter('text_size'))
+			box.add_widget(editing_playlist_label)
+		else:
+			box.add_widget(text_input)
 		popup_layout.add_widget(grid)
 		box.add_widget(popup_layout)
 		button_container.add_widget(open_button)
@@ -521,16 +545,26 @@ class PlaylistMenu(GridLayout):
 		open_button.bind(on_release=self.on_accept)
 		close_button.bind(on_release=self.on_close)
 
+	def edit_playlist(self, button):
+		button_corpse = button
+		self.popup.dismiss()
+		self.popup = None
+		self.add_playlist(button_corpse)
+
+
 	def on_checkbox_active(self, checkbox, value):
-		print("bing")
 		if value:
+			print("bing")
 			self.to_add.append(checkbox.metadata)
 			print(checkbox.metadata)
-		else:
+		elif self.to_add.__contains__(checkbox.metadata):
+			print("ding")
 			self.to_add.remove(checkbox.metadata)
+			print(self.to_add)
 
 	def on_accept(self, button):
 		file = open(library_path + button.widget_corpse.text + ".txt", 'w')
+		file.truncate(0)
 		file.write(str(self.to_add).replace("\\", "\\"))
 		file.close()
 		self.popup.dismiss()
