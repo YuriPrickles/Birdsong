@@ -204,7 +204,7 @@ class MusicPlayer(BoxLayout):
 		self.pause_button.bind(on_release=self.update_buttons)
 		self.loop_toggle.bind(on_release=self.update_buttons)
 
-		self.override_slider = True
+		self.override_slider = False
 		self.song_slider.bind(on_touch_up=self.on_slider_release)
 		self.song_slider.bind(on_touch_down=self.update_override_slider)
 
