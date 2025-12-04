@@ -563,7 +563,11 @@ class PlaylistMenu(GridLayout):
 			print(self.to_add)
 
 	def on_accept(self, button):
-		file = open(library_path + button.widget_corpse.text + ".txt", 'w')
+		illegal_chars = ["/","<",">","?","|","\\","\"","*",":"]
+		text:str = str(button.widget_corpse.text)
+		for ch in illegal_chars:
+			text = text.replace(ch, "")
+		file = open(library_path + text + ".txt", 'w')
 		file.truncate(0)
 		file.write(str(self.to_add).replace("\\", "\\"))
 		file.close()
