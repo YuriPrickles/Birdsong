@@ -286,6 +286,7 @@ class LibraryScrollView(GridLayout):
 		self.add_widget(self.searchbox)
 		self.add_widget(self.bigbox)
 
+
 	def update_library(self):
 		self.layout.clear_widgets()
 		for song in library:
@@ -314,11 +315,23 @@ class LibraryScrollView(GridLayout):
 			addqueue = Button(text="+", width=40, height=40, size_hint_x=0.25)
 			addqueue.bind(on_release=self.add_to_queue)
 			addqueue.path = song
+			remove = Button(text="X", size_hint_y=None, height=40, width=400, size_hint=(0.1, 1.0), halign="center",
+			                valign="middle")
+			remove.bind(size=remove.setter('text_size'))
+			remove.padding = (8, 0)
+			remove.path = song
+			remove.bind(on_release=self.remove_song)
 			item_container.add_widget(btn)
 			item_container.add_widget(artist_label)
 			item_container.add_widget(album_label)
 			item_container.add_widget(addqueue)
+			item_container.add_widget(remove)
 			self.layout.add_widget(item_container)
+
+	def remove_song(self, button):
+		if os.path.exists(button.path):
+			os.remove(str(button.path))
+			library.remove(button.path)
 
 	def add_to_queue(self, button):
 		audio_queue.append(button.path)
